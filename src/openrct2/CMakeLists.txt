@@ -4,9 +4,33 @@ if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
     message(FATAL_ERROR "Building in-source is not supported! Create a build dir and remove ${CMAKE_SOURCE_DIR}/CMakeCache.txt")
 endif ()
 
+if (VITA)
+    if( NOT DEFINED CMAKE_TOOLCHAIN_FILE )
+        if(DEFINED ENV{VITASDK})
+            set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+        else()
+            message(FATAL_ERROR "Please define VITASDK to point to your SDK path!")
+        endif()
+    endif()
+
+    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+
+    set(STATIC ON)
+    set(DISABLE_HTTP_TWITCH ON)
+    set(DISABLE_NETWORK ON)
+    set(DISABLE_TTF ON)
+    set(DISABLE_OPENGL ON)
+    set(ENABLE_LIGHTFX OFF)
+endif()
+
 # Needed for linking with non-broken OpenSSL on Apple platforms
 if (APPLE)
     set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/opt/openssl/lib/pkgconfig")
+endif ()
+
+if (VITA)
+    set(PKG_CONFIG_EXECUTABLE "/usr/bin/pkg-config")
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:$ENV{VITASDK}/arm-vita-eabi/lib/pkgconfig")
 endif ()
 
 # Third party libraries
@@ -55,6 +79,10 @@ project(${PROJECT} CXX)
 add_library(${PROJECT} ${OPENRCT2_CORE_SOURCES} ${OPENRCT2_CORE_MM_SOURCES} ${RCT2_SECTIONS})
 set_target_properties(${PROJECT} PROPERTIES PREFIX "")
 
+if (VITA)
+    target_link_libraries(${PROJECT} c)
+endif()
+
 # Libraries
 if (STATIC)
     target_link_libraries(${PROJECT} ${JANSSON_STATIC_LIBRARIES}
@@ -92,7 +120,7 @@ if (NOT DISABLE_NETWORK)
     endif ()
 endif ()
 
-if (NOT APPLE AND NOT MINGW)
+if (NOT APPLE AND NOT MINGW AND NOT VITA)
     # This is ugly hack to work around https://bugs.launchpad.net/ubuntu/+source/gcc-5/+bug/1568899.
     # Once C++17 is enabled (and thus old compilers are no longer supported, this needs to be gone.
     # We cannot simply detect the _compiler_ version, as the bug exists with the C++ _library_
@@ -113,9 +141,11 @@ if (NOT DISABLE_TTF)
     endif ()
 endif ()
 
-if (UNIX OR STATIC OR ${CMAKE_SYSTEM_NAME} MATCHES "BSD")
-    find_library(ICONV_LIBRARIES NAMES iconv libiconv libiconv-2 c)
-    target_link_libraries(${PROJECT} ${ICONV_LIBRARIES})
+if (NOT VITA)
+    if (UNIX OR STATIC OR ${CMAKE_SYSTEM_NAME} MATCHES "BSD")
+        find_library(ICONV_LIBRARIES NAMES iconv libiconv libiconv-2 c)
+        target_link_libraries(${PROJECT} ${ICONV_LIBRARIES})
+    endif()
 endif()
 
 if (HAVE_DISCORD_RPC)
@@ -123,7 +153,11 @@ if (HAVE_DISCORD_RPC)
 endif()
 
 # Includes
-target_include_directories(${PROJECT} SYSTEM PRIVATE ${LIBZIP_INCLUDE_DIRS})
+if (VITA)
+    target_include_directories(${PROJECT} PRIVATE ${LIBZIP_INCLUDE_DIRS})
+else()
+    target_include_directories(${PROJECT} SYSTEM PRIVATE ${LIBZIP_INCLUDE_DIRS})
+endif()
 target_include_directories(${PROJECT} PUBLIC ${JANSSON_INCLUDE_DIRS})
 target_include_directories(${PROJECT} PRIVATE ${PNG_INCLUDE_DIRS}
                                               ${ZLIB_INCLUDE_DIRS})
@@ -155,4 +189,18 @@ endif()
 if(X86 OR X86_64)
 set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/SSE41Drawing.cpp PROPERTIES COMPILE_FLAGS -msse4.1)
 set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/AVX2Drawing.cpp PROPERTIES COMPILE_FLAGS -mavx2)
+endif()
+
+if (VITA)
+    set(VITA_APP_NAME, ${PROJECT})
+    set(VITA_TITLEID "ANGU00002")
+    set(VITA_VERSION "01.00")
+    set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
+
+    vita_create_self(${SHORT_NAME}.self ${SHORT_NAME})
+
+    vita_create_vpk(${SHORT_NAME}.vpk ${VITA_TITLEID} ${SHORT_NAME}.self
+        VERSION ${VITA_VERSION}
+        NAME ${VITA_APP_NAME}
+    )
 endif()

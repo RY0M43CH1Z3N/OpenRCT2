@@ -14,7 +14,7 @@
 *****************************************************************************/
 #pragma endregion
 
-#if (defined(__linux__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__EMSCRIPTEN__)) && !defined(__ANDROID__)
+#if (defined(__linux__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__EMSCRIPTEN__)) && !defined(__ANDROID__) || defined(__vita__)
 
 #include <dlfcn.h>
 #include <sstream>
@@ -118,6 +118,7 @@ namespace OpenRCT2 { namespace Ui
             }
         }
 
+#if !defined(__vita__)
         std::string ShowFileDialog(SDL_Window * window, const FileDialogDesc &desc) override
         {
             std::string result;
@@ -244,7 +245,24 @@ namespace OpenRCT2 { namespace Ui
             }
             return result;
         }
+#else
 
+        std::string ShowFileDialog(SDL_Window * window, const FileDialogDesc &desc) override
+            {
+                STUB();
+
+                return nullptr;
+            }
+
+            std::string ShowDirectoryDialog(SDL_Window * window, const std::string &title) override
+            {
+                log_info(title.c_str());
+                STUB();
+
+                return "ux0:data/openrct2";
+            }
+
+#endif
     private:
         static DIALOG_TYPE GetDialogApp(std::string * executablePath)
         {

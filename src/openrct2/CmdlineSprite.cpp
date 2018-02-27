@@ -864,6 +864,7 @@ sint32 cmdline_for_sprite(const char **argv, sint32 argc)
         fprintf(stderr, "Unknown sprite command.\n");
         return 1;
     }
+    return 0;
 }
 
 const rct_sprite_file_palette_entry CmdlineSprite::_standardPalette[256] = {

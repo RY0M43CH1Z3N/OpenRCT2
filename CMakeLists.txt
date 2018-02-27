@@ -4,6 +4,22 @@ if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
     message(FATAL_ERROR "Building in-source is not supported! Create a build dir and remove ${CMAKE_SOURCE_DIR}/CMakeCache.txt")
 endif()
 
+option(VITA "Build for PS Vita")
+
+if (VITA)
+    if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+        if(DEFINED ENV{VITASDK})
+            set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+        else()
+            message(FATAL_ERROR "Please define VITASDK to point to your SDK path!")
+        endif()
+    endif()
+
+    set(SHORT_NAME openrct2)
+
+    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+endif()
+
 project(openrct2 CXX)
 
 include(FindPkgConfig)
@@ -41,6 +57,11 @@ if (PORTABLE OR WIN32)
     set(CMAKE_INSTALL_RPATH "$ORIGIN")
 endif ()
 
+if (VITA)
+    set(WITH_TESTS OFF)
+    set(DISABLE_NETWORK ON)
+endif()
+
 # Define current git branch
 execute_process(
     COMMAND git rev-parse --abbrev-ref HEAD
@@ -68,6 +89,13 @@ function (ADD_CHECK_CXX_COMPILER_FLAG _CXXFLAGS _CACHE_VAR _FLAG)
     endif ()
 endfunction ()
 
+if (VITA)
+    ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_C_FLAGS C_WARN_WRITE_STRINGS -Wno-error=date-time -O3 -Wno-unused-variable -Wno-unused-but-set-variable -fno-lto -fpermissive)
+    ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_WRITE_STRINGS -fpermissive)
+else()
+    ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_C_FLAGS C_WARN_WRITE_STRINGS -Wno-error=date-time)
+endif()
+
 ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_NULL_DEREFERENCE -Wnull-dereference)
 ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_SUGGEST_FINAL_TYPES -Wsuggest-final-types)
 ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_SUGGEST_FINAL_METHODS -Wsuggest-final-methods)
@@ -78,7 +106,7 @@ ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_MISSING_VARIABLE_DECLARATIO
 ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_DUPLICATED_BRANCHES -Wduplicated-branches)
 ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_RESTRICT -Wrestrict)
 
-if (MINGW)
+if (MINGW OR VITA)
     ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_SUGGEST_OVERRIDE -Wno-error=redundant-decls)
 endif ()
 
@@ -103,11 +131,16 @@ if(APPLE)
 endif()
 
 # On mingw all code is already PIC, this will avoid compiler error on redefining this option
-if (NOT MINGW)
+if (NOT MINGW AND NOT VITA)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif ()
 
-if (APPLE AND NOT USE_MMAP)
+if (VITA)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-PIC -I${VITASDK}/arm-vita-eabi/include/ -I${VITASDK}/arm-vita-eabi/include/SDL2/ -I${VITASDK}/arm-vita-eabi/include/freetype2 -std=gnu++14 ")
+    set(CMAKE_SHARED_LINKED_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static")
+endif()
+
+if ((APPLE AND NOT USE_MMAP) OR VITA)
     set(PIE_FLAG "-fno-pie")
 else ()
     set(PIE_FLAG "-fpie")
@@ -209,8 +242,21 @@ if (DOWNLOAD_TITLE_SEQUENCES)
             file(REMOVE \$ENV{DESTDIR}${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT}/title/title-sequences.zip)\n\
         endif ()")
 endif ()
-install(TARGETS "libopenrct2" LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-                              ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+if (WIN32)
+    install(TARGETS "libopenrct2" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+                                  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+else ()
+    if (PORTABLE)
+        if (VITA)
+            install(TARGETS "libopenrct2" ARCHIVE DESTINATION "${CMAKE_INSTALL_BINDIR}")
+        else ()
+            install(TARGETS "libopenrct2" LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+        endif ()
+    else ()
+        install(TARGETS "libopenrct2" LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+                                      ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    endif ()
+endif ()
 install(TARGETS "openrct2" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(TARGETS "openrct2-cli" OPTIONAL RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/g2.dat" DESTINATION "${CMAKE_INSTALL_DATADIR}/openrct2")

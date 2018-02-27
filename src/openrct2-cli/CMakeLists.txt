@@ -17,6 +17,10 @@ add_executable(${PROJECT} ${OPENRCT2_CLI_SOURCES})
 
 target_link_libraries(${PROJECT} "libopenrct2")
 
+if (VITA)
+	target_link_libraries(${PROJECT} freetype)
+endif()
+
 if (APPLE)
     target_link_libraries(${PROJECT} "-framework Cocoa")
 endif ()
